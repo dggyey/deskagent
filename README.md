@@ -1,6 +1,6 @@
-# QQ Agent
+# DeskAgent
 
-一个基于 Windows 平台运行的 AI Agent，通过自然语言对话控制 QQ 消息的自动收发、人格切换与任务执行。
+DeskAgent 是一个运行在 Windows 桌面上的 AI Agent，通过自然语言对话调用各种工具。目前核心能力是控制 QQ 消息的自动收发，未来可扩展文件管理、网页搜索、系统操作、日程提醒等。
 
 项目采用 **LLOneBot + OneBot** 作为 QQ 后端，**MCP（Model Context Protocol）** 作为工具扩展协议，**OpenAI/Claude** 作为 LLM 决策核心。
 
@@ -52,7 +52,7 @@
 ### 1. 克隆项目并安装依赖
 
 ```powershell
-cd qq-agent
+cd deskagent
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
@@ -127,7 +127,7 @@ ONEBOT_WS_URL=ws://127.0.0.1:3001
 ## 项目结构
 
 ```
-qq-agent/
+deskagent/
 ├── mock_server.py        # OneBot Mock 后端（本地测试）
 ├── qq_mcp_server.py      # QQ MCP Server
 ├── agent_core.py         # Agent 核心（LLM + MCP Client）
