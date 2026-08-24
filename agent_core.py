@@ -26,6 +26,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 import config
+import memory
 import storage
 from auto_reply import worker as auto_reply_worker
 from listener import listener
@@ -52,6 +53,8 @@ SYSTEM_PROMPT = """
   - persona：回复人格，比如"简洁的朋友语气，不暴露是 AI"
 - qq_stop_auto_reply：停止自动回复
 - qq_get_auto_reply_status：查看当前自动回复配置
+- memory_remember / memory_forget / memory_list：长期记忆的增删查（用户说"记住/忘记/你记得什么"时用）
+- safety_get_alerts：查看敏感内容拦截提醒
 
 行为要求：
 1. 用户只说昵称时（例如"只回小李""别回王总"），从好友/群列表中解析出 ID 再传参。
@@ -68,6 +71,9 @@ KEYWORD_TOOLS = {
     "好友列表": ("qq_get_friend_list", {}),
     "群列表": ("qq_get_group_list", {}),
     "状态": ("qq_get_status", {}),
+    "拦截提醒": ("safety_get_alerts", {}),
+    "你记得什么": ("memory_list", {}),
+    "记忆列表": ("memory_list", {}),
 }
 
 
@@ -167,6 +173,12 @@ class DeskAgent:
 
     async def _keyword_route(self, user_input: str) -> str:
         """无 API Key 时的兜底：关键词直接对应工具调用。"""
+        # 记忆指令带参数，优先单独处理
+        if user_input.startswith(("记住", "记一下", "记得")):
+            return memory.remember(user_input)
+        if user_input.startswith(("忘记", "忘掉", "删除记忆")):
+            return memory.forget(user_input)
+
         for keyword, (tool, args) in KEYWORD_TOOLS.items():
             if keyword in user_input:
                 result = await self.call_tool(tool, args)
@@ -176,6 +188,7 @@ class DeskAgent:
         return (
             "未配置 OPENAI_API_KEY，当前仅支持关键词指令：\n"
             + "\n".join(f"  - {k}" for k in KEYWORD_TOOLS)
+            + "\n  - 记住 小李：喜欢美式咖啡\n  - 忘记 咖啡\n  - 拦截提醒"
         )
 
 
@@ -203,8 +216,12 @@ async def main() -> None:
     print("  - 开启自动回复 / 停止自动回复 / 自动回复状态")
     print("  - 只给小李自动回（需要 LLM）")
     print("  - 给技术交流群发消息说下午开会（需要 LLM）")
+    print("  - 记住 小李：喜欢美式咖啡 / 忘记 咖啡 / 你记得什么")
+    print("  - 拦截提醒（查看被拦下的敏感消息）")
     print("输入 exit 退出")
     print("=" * 50)
+
+    alert_task = asyncio.create_task(_alert_notifier())
 
     loop = asyncio.get_event_loop()
     try:
@@ -225,10 +242,29 @@ async def main() -> None:
                 reply = f"出错了：{exc}"
             print(f"\nAgent: {reply}")
     finally:
+        alert_task.cancel()
         await agent.close()
         listener.stop()
         auto_reply_worker.stop()
         print("已退出。")
+
+
+async def _alert_notifier() -> None:
+    """轮询未读的敏感内容提醒，实时打印到控制台。"""
+    while True:
+        await asyncio.sleep(2)
+        try:
+            unseen = storage.get_alerts(unseen_only=True, limit=10)
+            if unseen:
+                print()
+                for row in unseen:
+                    print(
+                        f"⚠️  敏感内容提醒：{row['sender_name']}（{row['source_id']}）"
+                        f"「{row['content']}」—— {row['reason']}。已拦截，未自动回复，请人工处理。"
+                    )
+                storage.mark_alerts_seen()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 if __name__ == "__main__":

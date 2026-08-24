@@ -66,6 +66,26 @@ def init_db() -> None:
                 updated_at REAL
             );
 
+            CREATE TABLE IF NOT EXISTS alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_id TEXT,
+                source_id TEXT,
+                sender_name TEXT,
+                content TEXT,
+                reason TEXT,
+                handled INTEGER DEFAULT 0,            -- 用户是否已看过提醒
+                created_at REAL
+            );
+
+            CREATE TABLE IF NOT EXISTS memories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scope TEXT NOT NULL,                  -- *（全局）或 target_id
+                content TEXT NOT NULL,
+                created_at REAL,
+                updated_at REAL,
+                UNIQUE(scope, content)
+            );
+
             INSERT OR IGNORE INTO auto_reply_config (id) VALUES (1);
             """
         )
@@ -191,3 +211,94 @@ def set_auto_reply_config(**fields) -> dict:
                 tuple(updates.values()),
             )
     return get_auto_reply_config()
+
+
+# ---------------------------------------------------------------------------
+# alerts（敏感内容提醒）
+# ---------------------------------------------------------------------------
+
+def add_alert(message_id: str, source_id: str, sender_name: str,
+              content: str, reason: str) -> int:
+    with _LOCK, _connect() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO alerts (message_id, source_id, sender_name, content, reason, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (message_id, source_id, sender_name, content, reason, time.time()),
+        )
+        return cur.lastrowid
+
+
+def get_alerts(unseen_only: bool = True, limit: int = 20) -> list[sqlite3.Row]:
+    with _LOCK, _connect() as conn:
+        sql = "SELECT * FROM alerts" + (" WHERE handled = 0" if unseen_only else "") + \
+              " ORDER BY created_at DESC LIMIT ?"
+        return conn.execute(sql, (limit,)).fetchall()
+
+
+def mark_alerts_seen() -> None:
+    with _LOCK, _connect() as conn:
+        conn.execute("UPDATE alerts SET handled = 1 WHERE handled = 0")
+
+
+# ---------------------------------------------------------------------------
+# memories（长期记忆）
+# ---------------------------------------------------------------------------
+
+def is_memory_blocked(content: str) -> bool:
+    """记忆内容不能包含敏感信息。"""
+    lowered = content.lower()
+    return any(k in lowered for k in ("密码", "password", "验证码", "卡号", "身份证"))
+
+
+def add_memory(scope: str, content: str) -> bool:
+    """返回 True 表示新增/更新成功。scope 为 '*' 或 target_id。"""
+    if is_memory_blocked(content):
+        return False
+    now = time.time()
+    with _LOCK, _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO memories (scope, content, created_at, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(scope, content) DO UPDATE SET updated_at = excluded.updated_at
+            """,
+            (scope, content, now, now),
+        )
+    return True
+
+
+def forget_memory(scope: str, keyword: str) -> int:
+    """删除指定 scope 下包含关键词的记忆，返回删除条数。"""
+    with _LOCK, _connect() as conn:
+        cur = conn.execute(
+            "DELETE FROM memories WHERE scope = ? AND content LIKE ?",
+            (scope, f"%{keyword}%"),
+        )
+        return cur.rowcount
+
+
+def get_memories(scope: str | None = None, limit: int = 30) -> list[sqlite3.Row]:
+    with _LOCK, _connect() as conn:
+        if scope:
+            # 全局 + 指定作用域都取
+            return conn.execute(
+                "SELECT * FROM memories WHERE scope IN ('*', ?) ORDER BY updated_at DESC LIMIT ?",
+                (scope, limit),
+            ).fetchall()
+        return conn.execute(
+            "SELECT * FROM memories ORDER BY updated_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+
+
+def get_memory_context(scope: str | None = None, limit: int = 8) -> str:
+    """把记忆拼成可注入 prompt 的上下文文本。"""
+    rows = get_memories(scope, limit)
+    if not rows:
+        return ""
+    lines = ["【关于你（主人）的记忆】"]
+    for row in rows:
+        tag = "" if row["scope"] == "*" else f"[{row['scope']}] "
+        lines.append(f"- {tag}{row['content']}")
+    return "\n".join(lines)

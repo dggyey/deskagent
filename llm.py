@@ -27,15 +27,18 @@ def _call_openai(system_prompt: str, user_prompt: str) -> str:
     return (resp.choices[0].message.content or "").strip()
 
 
-def generate_auto_reply(msg: dict, persona: str) -> str | None:
+def generate_auto_reply(msg: dict, persona: str, memory_context: str = "") -> str | None:
     """根据收到的消息生成自动回复。返回 None 表示不回复。"""
     persona = persona or DEFAULT_PERSONA
     source_label = "好友" if msg["type"] == "private" else f"群「{msg.get('source_name') or msg['source_id']}」"
+    memory_block = f"\n{memory_context}\n" if memory_context else ""
     user_prompt = (
         f"{source_label} {msg['sender_name'] or msg['sender_id']} 发来消息：\n"
-        f"「{msg['content']}」\n\n"
+        f"「{msg['content']}」\n"
+        f"{memory_block}\n"
         "请判断是否回复：\n"
         "- 若不需要回复（如刷屏、无意义、敏感内容），只输出 [[SKIP]]\n"
+        "- 回复时可参考上面的记忆内容，但不要复述敏感信息\n"
         "- 否则直接输出回复文本，不要带引号和前缀"
     )
 

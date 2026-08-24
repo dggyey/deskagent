@@ -18,6 +18,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
 import config
+import memory
 import onebot_client
 import storage
 
@@ -146,6 +147,37 @@ async def list_tools() -> list[Tool]:
             description="同步 QQ 好友列表和群列表到本地，建立昵称到 ID 的映射",
             inputSchema={"type": "object", "properties": {}},
         ),
+        Tool(
+            name="memory_remember",
+            description="记住一条长期记忆。scope 传好友/群昵称可定向记忆，传 * 为全局。含敏感信息会被拒收。",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "scope": {"type": "string", "description": "作用域：昵称或 *"},
+                    "content": {"type": "string", "description": "要记住的内容"},
+                },
+                "required": ["content"],
+            },
+        ),
+        Tool(
+            name="memory_forget",
+            description="按关键词删除记忆",
+            inputSchema={
+                "type": "object",
+                "properties": {"keyword": {"type": "string", "description": "要删除的记忆关键词"}},
+                "required": ["keyword"],
+            },
+        ),
+        Tool(
+            name="memory_list",
+            description="列出当前所有长期记忆",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="safety_get_alerts",
+            description="查看敏感内容拦截提醒（比如有人索要验证码、涉及转账等被拦下的消息）",
+            inputSchema={"type": "object", "properties": {}},
+        ),
     ]
 
 
@@ -212,6 +244,52 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             for g in groups:
                 storage.upsert_contact("group", str(g.get("group_id")), g.get("group_name", ""))
             return _text(f"联系人同步完成：{len(friends)} 个好友，{len(groups)} 个群")
+
+        if name == "memory_remember":
+            scope_name = (arguments.get("scope") or "*").strip()
+            content = (arguments.get("content") or "").strip()
+            if not content:
+                return _text("要记住什么？")
+            if scope_name != "*":
+                scope_id = storage.resolve_contact("friend", scope_name)
+                scope_id = scope_id or storage.resolve_contact("group", scope_name) or "*"
+            else:
+                scope_id = "*"
+            if not storage.add_memory(scope_id, content):
+                return _text("不能记住包含密码/验证码/卡号等敏感信息的内容。")
+            label = scope_name if scope_id != "*" else "全局"
+            return _text(f"已记住（{label}）：{content}")
+
+        if name == "memory_forget":
+            keyword = (arguments.get("keyword") or "").strip()
+            if not keyword:
+                return _text("要忘记哪条记忆？给出关键词。")
+            deleted = storage.forget_memory("*", keyword)
+            for row in storage.get_memories(limit=200):
+                deleted += storage.forget_memory(row["scope"], keyword)
+            return _text(f"已删除 {deleted} 条记忆。" if deleted else "没有找到匹配的记忆。")
+
+        if name == "memory_list":
+            rows = storage.get_memories(limit=50)
+            if not rows:
+                return _text("目前没有任何长期记忆。")
+            lines = ["我记得这些："]
+            for row in rows:
+                tag = "全局" if row["scope"] == "*" else row["scope"]
+                lines.append(f"- [{tag}] {row['content']}")
+            return _text("\n".join(lines))
+
+        if name == "safety_get_alerts":
+            rows = storage.get_alerts(unseen_only=False, limit=20)
+            if not rows:
+                return _text("没有任何被拦截的敏感内容提醒。")
+            lines = ["敏感内容拦截提醒（最新在前）："]
+            for row in rows:
+                seen = "已读" if row["handled"] else "未读"
+                lines.append(
+                    f"- [{seen}] {row['sender_name']}({row['source_id']}) 「{row['content']}」原因：{row['reason']}"
+                )
+            return _text("\n".join(lines))
 
         return _text(f"未知工具: {name}")
     except Exception as exc:  # noqa: BLE001

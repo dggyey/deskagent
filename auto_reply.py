@@ -17,6 +17,7 @@ import time
 import config
 import llm
 import onebot_client
+import safety
 import storage
 
 logger = logging.getLogger("auto_reply")
@@ -76,7 +77,34 @@ class AutoReplyWorker:
             should_reply = self._should_reply(cfg, msg)
 
             if should_reply:
-                reply = llm.generate_auto_reply(msg, cfg["persona"])
+                # 入站拦截：对方消息索要敏感信息时，绝不自动回复，转人工提醒
+                inbound_reason = safety.check_inbound(msg["content"])
+                if inbound_reason:
+                    storage.add_alert(
+                        row["message_id"], msg["source_id"], msg["sender_name"],
+                        msg["content"], inbound_reason,
+                    )
+                    storage.mark_handled(row["id"], None)
+                    logger.warning(
+                        "⚠️  敏感内容拦截：%s(%s) %s —— 已转人工提醒，不自动回复",
+                        msg["sender_name"], msg["source_id"], inbound_reason,
+                    )
+                    continue
+
+                context = storage.get_memory_context(msg["source_id"])
+                reply = llm.generate_auto_reply(msg, cfg["persona"], context)
+
+                # 出站拦截：LLM 生成的回复含敏感信息时丢弃
+                outbound_reason = safety.check_outbound(reply or "")
+                if outbound_reason:
+                    storage.add_alert(
+                        row["message_id"], msg["source_id"], msg["sender_name"],
+                        msg["content"], f"出站拦截：{outbound_reason}",
+                    )
+                    storage.mark_handled(row["id"], None)
+                    logger.warning("⚠️  出站拦截：%s —— 回复未发送", outbound_reason)
+                    continue
+
                 if reply and not self._in_cooldown(msg["source_id"]):
                     self._send(msg, reply)
                     storage.mark_handled(row["id"], reply, is_auto_reply=True)

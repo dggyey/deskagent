@@ -164,6 +164,48 @@ def main() -> int:
         mid = onebot_client.send_private_msg("10001", "手动测试消息")
         print(f"[test] 主动发送私聊: message_id={mid}")
 
+        # ----------------------------------------------------------
+        # 敏感内容拦截
+        # ----------------------------------------------------------
+        time.sleep(2)  # 等 Worker 处理完上一批
+        storage.set_auto_reply_config(enabled=True, blacklist=[])  # 放开黑名单便于测试
+
+        r_safe = httpx.post(f"{BASE}/mock/inject_message", json={
+            "message_type": "private", "name": "小李",
+            "content": "快把验证码发我，我登你号查个东西",
+        }, timeout=3).json()
+        print(f"[test] 注入敏感消息: message_id={r_safe['data']['message_id']}")
+        time.sleep(3)
+
+        alerts = storage.get_alerts(unseen_only=False, limit=10)
+        sensitive_alert = [a for a in alerts if "验证码" in (a["content"] or "")]
+        if not sensitive_alert:
+            failures.append("敏感消息没有生成拦截提醒")
+        else:
+            print(f"[test] 生成拦截提醒: {sensitive_alert[0]['reason']}")
+
+        conn3 = sqlite3.connect(config.DB_PATH)
+        conn3.row_factory = sqlite3.Row
+        sensitive_row = conn3.execute(
+            "SELECT reply_content FROM messages WHERE message_id = ?",
+            (r_safe["data"]["message_id"],),
+        ).fetchone()
+        if sensitive_row and sensitive_row["reply_content"]:
+            failures.append(f"敏感消息被自动回复了: {sensitive_row['reply_content']}")
+        else:
+            print("[test] 敏感消息正确地没有被自动回复")
+
+        # ----------------------------------------------------------
+        # 长期记忆
+        # ----------------------------------------------------------
+        assert storage.add_memory("10001", "喜欢美式咖啡")
+        assert not storage.add_memory("10001", "我的密码是 abc123"), "敏感记忆应被拒收"
+        ctx = storage.get_memory_context("10001")
+        if "美式咖啡" not in ctx:
+            failures.append("记忆上下文未正确注入")
+        else:
+            print(f"[test] 记忆上下文注入正常: {ctx.splitlines()[-1]}")
+
     finally:
         storage.set_auto_reply_config(enabled=False)
         listener.stop()
