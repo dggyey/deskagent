@@ -64,7 +64,7 @@ def quick_cmd(history: list, command: str):
     return respond(history, command)
 
 
-def render_status() -> tuple[str, str, str]:
+def render_status() -> tuple[str, str, str, str]:
     cfg = storage.get_auto_reply_config()
     state_icon = "🟢 已开启" if cfg["enabled"] else "⛔ 已关闭"
     status = (
@@ -106,7 +106,29 @@ def render_status() -> tuple[str, str, str]:
     else:
         memory_md = "### 长期记忆\n暂无。说「记住 小李：喜欢美式」试试。"
 
-    return status, alerts_md, memory_md
+    # QQ 消息记录：对方发的 + 我（自动）回的，按时间正序
+    conn = storage._connect()
+    msg_rows = conn.execute(
+        """
+        SELECT message_type, source_id, sender_name, content, is_self, is_auto_reply
+        FROM messages ORDER BY id DESC LIMIT 10
+        """,
+    ).fetchall()
+    conn.close()
+    if msg_rows:
+        lines = ["### QQ 消息记录（最新在前）"]
+        for row in msg_rows:
+            where = "群" if row["message_type"] == "group" else "私"
+            if row["is_self"]:
+                tag = "🤖 自动回" if row["is_auto_reply"] else "💬 我"
+                lines.append(f"- [{where}] {tag} → {row['content']}")
+            else:
+                lines.append(f"- [{where}] {row['sender_name']}：{row['content']}")
+        messages_md = "\n".join(lines)
+    else:
+        messages_md = "### QQ 消息记录\n暂无。注入一条消息就会出现在这里。"
+
+    return status, alerts_md, memory_md, messages_md
 
 
 def build_ui() -> gr.Blocks:
@@ -136,21 +158,28 @@ def build_ui() -> gr.Blocks:
                     btn_alerts = gr.Button("拦截提醒", size="sm")
             with gr.Column(scale=1):
                 status_md = gr.Markdown("### 自动回复状态\n加载中…")
+                messages_md = gr.Markdown("### QQ 消息记录\n加载中…")
                 alerts_md = gr.Markdown("### 敏感内容提醒\n加载中…")
                 memory_md = gr.Markdown("### 长期记忆\n加载中…")
 
-        msg.submit(respond, inputs=[chatbot, msg], outputs=[chatbot, msg])
-        send_btn.click(respond, inputs=[chatbot, msg], outputs=[chatbot, msg])
-        btn_on.click(quick_cmd, inputs=[chatbot, gr.State("开启自动回复")], outputs=[chatbot, msg]) \
-            .then(render_status, outputs=[status_md, alerts_md, memory_md])
-        btn_off.click(quick_cmd, inputs=[chatbot, gr.State("停止自动回复")], outputs=[chatbot, msg]) \
-            .then(render_status, outputs=[status_md, alerts_md, memory_md])
-        btn_sync.click(quick_cmd, inputs=[chatbot, gr.State("同步联系人")], outputs=[chatbot, msg])
-        btn_mem.click(quick_cmd, inputs=[chatbot, gr.State("你记得什么")], outputs=[chatbot, msg])
-        btn_alerts.click(quick_cmd, inputs=[chatbot, gr.State("拦截提醒")], outputs=[chatbot, msg]) \
-            .then(render_status, outputs=[status_md, alerts_md, memory_md])
+        PANELS = [status_md, alerts_md, memory_md, messages_md]
 
-        demo.load(render_status, outputs=[status_md, alerts_md, memory_md], every=3)
+        msg.submit(respond, inputs=[chatbot, msg], outputs=[chatbot, msg]) \
+            .then(render_status, outputs=PANELS)
+        send_btn.click(respond, inputs=[chatbot, msg], outputs=[chatbot, msg]) \
+            .then(render_status, outputs=PANELS)
+        btn_on.click(quick_cmd, inputs=[chatbot, gr.State("开启自动回复")], outputs=[chatbot, msg]) \
+            .then(render_status, outputs=PANELS)
+        btn_off.click(quick_cmd, inputs=[chatbot, gr.State("停止自动回复")], outputs=[chatbot, msg]) \
+            .then(render_status, outputs=PANELS)
+        btn_sync.click(quick_cmd, inputs=[chatbot, gr.State("同步联系人")], outputs=[chatbot, msg]) \
+            .then(render_status, outputs=PANELS)
+        btn_mem.click(quick_cmd, inputs=[chatbot, gr.State("你记得什么")], outputs=[chatbot, msg]) \
+            .then(render_status, outputs=PANELS)
+        btn_alerts.click(quick_cmd, inputs=[chatbot, gr.State("拦截提醒")], outputs=[chatbot, msg]) \
+            .then(render_status, outputs=PANELS)
+
+        demo.load(render_status, outputs=PANELS, every=3)
 
     return demo
 

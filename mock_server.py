@@ -221,6 +221,18 @@ async def send_group_msg(req: Request):
     return {"status": "ok", "retcode": 0, "data": {"message_id": message_id}, "message": ""}
 
 
+@app.get("/mock/inject_message")
+async def inject_message_get(message_type: str = "private", name: str = "小李", content: str = "测试消息"):
+    """浏览器友好版：直接打开链接就能模拟一条收到的消息。
+
+    例：http://127.0.0.1:11451/mock/inject_message?name=小李&content=晚上吃啥
+    """
+    event = build_message_event(message_type, name, content)
+    await broadcast(event)
+    print(f"[Mock] 注入消息: {event['message_type']} {event['sender']['nickname']}: {content}")
+    return {"status": "ok", "injected": event, "tip": "去 http://127.0.0.1:7860 的「QQ 消息记录」面板查看回复"}
+
+
 @app.post("/mock/inject_message")
 async def inject_message(req: Request):
     """手动注入一条模拟收到的消息（测试用）。
