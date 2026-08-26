@@ -188,6 +188,11 @@ Agent: 自动回复已停止。
 
 ## 切换到真实 QQ（Windows 环境）
 
+完整分步手册见 **[`docs/windows-llonebot-guide.md`](docs/windows-llonebot-guide.md)**
+（装 QQ → 装 LiteLoaderQQNT → 装 LLOneBot → 配端口 → 改 .env → 验收 → 开机自启 → 故障速查表）。
+
+摘要：
+
 1. 安装 QQ NT 客户端（9.9.x+）
 2. 安装 [LiteLoaderQQNT](https://github.com/LiteLoaderQQNT/LiteLoaderQQNT)
 3. 安装 [LLOneBot](https://github.com/LLOneBot/LLOneBot) 插件
