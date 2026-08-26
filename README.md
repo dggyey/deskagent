@@ -116,14 +116,27 @@ ONEBOT_WS_URL=ws://127.0.0.1:11451/ws
 .venv\Scripts\python.exe mock_server.py
 ```
 
-### 5. 启动 Agent CLI
+### 5. 启动交互界面（二选一）
 
-另开一个终端：
+**命令行版**：
 
 ```powershell
 cd deskagent
 .venv\Scripts\python.exe agent_core.py
 ```
+
+**网页版（推荐）**：
+
+```powershell
+cd deskagent
+.venv\Scripts\python.exe web_ui.py
+```
+
+浏览器打开 http://127.0.0.1:7860 ：
+
+- 左侧：对话窗口，支持全部自然语言指令
+- 右侧：自动回复状态 / 敏感内容提醒 / 长期记忆，每 3 秒自动刷新
+- 快捷按钮：一键开启/停止自动回复等
 
 ### 6. 尝试对话
 
@@ -250,9 +263,10 @@ deskagent/
 - [x] 敏感内容拦截（入站 + 出站，转人工提醒）
 - [x] 长期记忆（全局 + 按联系人定向）
 - [x] 端到端冒烟测试
-- [ ] WebUI / 桌面宠物前端
+- [x] WebUI（Gradio：对话 + 状态/提醒/记忆面板）
 - [ ] 文件操作、网页搜索、系统命令等更多 MCP tools
 - [ ] LLM 语义级敏感判断（可选开关）
+- [ ] 桌面宠物前端（Tkinter/PyQt）
 
 ---
 

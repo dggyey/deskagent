@@ -9,16 +9,19 @@ openai>=1.35.0
 httpx>=0.27.0
 websocket-client>=1.8.0   # 消息监听器用（WebSocketApp，同步 API）
 websockets>=12.0          # uvicorn 服务端 WebSocket 支持
-fastapi>=0.111.0
+fastapi==0.112.4          # gradio 4.x 兼容组合
+starlette==0.38.6
 uvicorn>=0.30.0
 
 # Config & utils
-pydantic>=2.7.0
-pydantic-settings>=2.3.0
+pydantic==2.9.2
 python-dotenv>=1.0.0
 
 # Storage
 aiosqlite>=0.20.0
+
+# WebUI（5.0/6.0 的 Chatbot/Blocks API 有破坏性变更，钉在 4.x）
+gradio>=4.40.0,<5.0.0
 
 # Dev
 pytest>=8.0.0
