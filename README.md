@@ -110,6 +110,20 @@ ONEBOT_HTTP_URL=http://127.0.0.1:11451
 ONEBOT_WS_URL=ws://127.0.0.1:11451/ws
 ```
 
+### 3.5（可选但推荐）接入大模型
+
+不配 API Key 时是对话关键词调试模式；配了就解锁完整的自然语言理解和真实自动回复。
+任何 OpenAI 兼容服务都支持，例如：
+
+| 服务 | `OPENAI_BASE_URL` | `LLM_MODEL` |
+|------|-------------------|-------------|
+| OpenAI 官方 | （留空） | `gpt-4o-mini` |
+| DeepSeek | `https://api.deepseek.com` | `deepseek-chat` |
+| 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
+| OpenRouter（含 Claude） | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4.5` |
+
+填好 `OPENAI_API_KEY` + （可选）`OPENAI_BASE_URL` + `LLM_MODEL` 三行即可。
+
 ### 4. 启动 Mock 后端（公司电脑 / 无 QQ 环境）
 
 ```powershell

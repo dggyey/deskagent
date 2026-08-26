@@ -15,7 +15,10 @@ DEFAULT_PERSONA = "你是用户的替身，用自然、简短、口语化的语�
 def _call_openai(system_prompt: str, user_prompt: str) -> str:
     from openai import OpenAI
 
-    client = OpenAI(api_key=config.OPENAI_API_KEY)
+    client = OpenAI(
+        api_key=config.OPENAI_API_KEY,
+        base_url=config.OPENAI_BASE_URL or None,
+    )
     resp = client.chat.completions.create(
         model=config.LLM_MODEL,
         messages=[

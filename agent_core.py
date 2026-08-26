@@ -133,7 +133,10 @@ class DeskAgent:
 
         from openai import OpenAI
 
-        client = OpenAI(api_key=config.OPENAI_API_KEY)
+        client = OpenAI(
+            api_key=config.OPENAI_API_KEY,
+            base_url=config.OPENAI_BASE_URL or None,
+        )
         self.messages.append({"role": "user", "content": user_input})
 
         for _round in range(5):  # 最多 5 轮工具调用

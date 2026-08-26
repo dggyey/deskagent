@@ -22,8 +22,9 @@ STORAGE_DIR.mkdir(exist_ok=True)
 
 DB_PATH = STORAGE_DIR / "deskagent.db"
 
-# LLM
+# LLM（任何 OpenAI 兼容服务都可以，base_url 留空则走 OpenAI 官方）
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "")
 LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o-mini")
 
 # OneBot 后端（mock 或真实 LLOneBot）
