@@ -32,6 +32,12 @@ ONEBOT_HTTP_URL = os.environ.get("ONEBOT_HTTP_URL", "http://127.0.0.1:11451")
 ONEBOT_WS_URL = os.environ.get("ONEBOT_WS_URL", "ws://127.0.0.1:11451/ws")
 ONEBOT_ACCESS_TOKEN = os.environ.get("ONEBOT_ACCESS_TOKEN", "")
 
+# WebUI 访问控制（手机/局域网访问时必须设密码）
+WEBUI_HOST = os.environ.get("DESKAGENT_HOST", "0.0.0.0")  # 0.0.0.0 = 允许局域网访问
+WEBUI_PORT = int(os.environ.get("DESKAGENT_PORT", "7860"))
+WEBUI_USER = os.environ.get("DESKAGENT_USER", "admin")
+WEBUI_PASS = os.environ.get("DESKAGENT_PASS", "deskagent123")
+
 # Agent 行为
 OWNER_ID = os.environ.get("AGENT_OWNER_QQ", "")
 REPLY_COOLDOWN_SECONDS = float(os.environ.get("AUTO_REPLY_COOLDOWN_SECONDS", "3"))

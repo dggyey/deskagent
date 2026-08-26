@@ -43,6 +43,12 @@ class AgentBridge:
         fut = asyncio.run_coroutine_threadsafe(self.agent.chat(text), self.loop)
         return fut.result(timeout=120)
 
+    def call_tool_sync(self, name: str, arguments: dict) -> str:
+        fut = asyncio.run_coroutine_threadsafe(
+            self.agent.call_tool(name, arguments), self.loop
+        )
+        return fut.result(timeout=60)
+
 
 bridge: AgentBridge | None = None
 
@@ -62,6 +68,24 @@ def respond(history: list, message: str):
 
 def quick_cmd(history: list, command: str):
     return respond(history, command)
+
+
+def quick_send(target_kind: str, target_name: str, content: str):
+    """快捷发送面板：不经 LLM，直接调 MCP 发出去。对象支持昵称或 ID。"""
+    target_name = (target_name or "").strip()
+    content = (content or "").strip()
+    if not target_name or not content:
+        return "⚠️ 请先填对象和内容。对象可填昵称（如 小李）或 QQ 号 / 群号。"
+    kind = "friend" if target_kind == "私聊" else "group"
+    target_id = storage.resolve_contact(kind, target_name) or target_name
+    try:
+        if kind == "friend":
+            result = bridge.call_tool_sync("qq_send_private_msg", {"user_id": target_id, "content": content})
+        else:
+            result = bridge.call_tool_sync("qq_send_group_msg", {"group_id": target_id, "content": content})
+    except Exception as exc:  # noqa: BLE001
+        return f"发送失败：{exc}"
+    return f"✅ {result}"
 
 
 def render_status() -> tuple[str, str, str, str]:
@@ -162,7 +186,19 @@ def build_ui() -> gr.Blocks:
                 alerts_md = gr.Markdown("### 敏感内容提醒\n加载中…")
                 memory_md = gr.Markdown("### 长期记忆\n加载中…")
 
+        with gr.Group():
+            gr.Markdown("### 📨 QQ 快捷发送（手机遥控用）")
+            with gr.Row():
+                kind = gr.Radio(["私聊", "群聊"], value="私聊", show_label=False, scale=2)
+                target = gr.Textbox(placeholder="小李 或 QQ 号/群号", show_label=False, scale=3)
+            with gr.Row():
+                qmsg = gr.Textbox(placeholder="要发送的内容", show_label=False, scale=5)
+                qsend = gr.Button("发送", variant="primary", scale=1)
+            qresult = gr.Markdown("对象支持昵称，首次使用请先「同步联系人」。")
+
         PANELS = [status_md, alerts_md, memory_md, messages_md]
+        qsend.click(quick_send, inputs=[kind, target, qmsg], outputs=qresult) \
+            .then(render_status, outputs=PANELS)
 
         msg.submit(respond, inputs=[chatbot, msg], outputs=[chatbot, msg]) \
             .then(render_status, outputs=PANELS)
@@ -197,11 +233,26 @@ def main() -> None:
     global bridge
     print("[WebUI] 正在连接 MCP 工具层…")
     bridge = AgentBridge()
-    print("[WebUI] 就绪，打开 http://127.0.0.1:7860")
+
+    import socket
+
+    try:
+        lan_ip = socket.gethostbyname(socket.gethostname())
+    except OSError:
+        lan_ip = "你的电脑IP"
+    print(f"[WebUI] 就绪")
+    print(f"  本机访问:   http://127.0.0.1:{config.WEBUI_PORT}")
+    print(f"  手机访问:   http://{lan_ip}:{config.WEBUI_PORT} （同一 Wi-Fi 下）")
+    print(f"  登录账号:   {config.WEBUI_USER} / {config.WEBUI_PASS}")
+    print("  （密码可在 .env 用 DESKAGENT_PASS 修改）")
 
     demo = build_ui()
     try:
-        demo.launch(server_name="127.0.0.1", server_port=7860)
+        demo.launch(
+            server_name=config.WEBUI_HOST,
+            server_port=config.WEBUI_PORT,
+            auth=(config.WEBUI_USER, config.WEBUI_PASS),
+        )
     finally:
         daemon_proc.terminate()
 
