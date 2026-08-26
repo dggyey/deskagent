@@ -67,9 +67,10 @@ _msg_seq = 0
 
 
 def next_message_id() -> str:
+    # 带毫秒时间戳：mock 重启后 seq 归零也不会和数据库旧记录撞 ID 被去重丢弃
     global _msg_seq
     _msg_seq += 1
-    return f"mock-{_msg_seq}"
+    return f"mock-{int(time.time() * 1000)}-{_msg_seq}"
 
 
 @dataclass

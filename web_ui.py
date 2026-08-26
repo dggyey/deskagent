@@ -15,16 +15,18 @@ DeskAgent WebUI（Gradio）
 from __future__ import annotations
 
 import asyncio
+import atexit
 import json
+import subprocess
+import sys
 import threading
+from pathlib import Path
 
 import gradio as gr
 
 import config
 import storage
 from agent_core import DeskAgent
-from auto_reply import worker as auto_reply_worker
-from listener import listener
 
 
 class AgentBridge:
@@ -155,8 +157,13 @@ def build_ui() -> gr.Blocks:
 
 def main() -> None:
     storage.init_db()
-    listener.start()
-    auto_reply_worker.start()
+
+    # 后台服务（监听 + 自动回复）放在独立子进程里跑，
+    # 与 Gradio/uvicorn 的事件循环彻底隔离，互不干扰
+    daemon_proc = subprocess.Popen(
+        [sys.executable, str(Path(__file__).parent / "daemon.py")],
+    )
+    atexit.register(daemon_proc.terminate)
 
     global bridge
     print("[WebUI] 正在连接 MCP 工具层…")
@@ -167,8 +174,7 @@ def main() -> None:
     try:
         demo.launch(server_name="127.0.0.1", server_port=7860)
     finally:
-        listener.stop()
-        auto_reply_worker.stop()
+        daemon_proc.terminate()
 
 
 if __name__ == "__main__":

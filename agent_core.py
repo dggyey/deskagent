@@ -28,8 +28,6 @@ from mcp.client.stdio import stdio_client
 import config
 import memory
 import storage
-from auto_reply import worker as auto_reply_worker
-from listener import listener
 
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL, logging.INFO),
@@ -202,9 +200,14 @@ class DeskAgent:
 async def main() -> None:
     storage.init_db()
 
-    # 1. 后台：消息监听 + 自动回复（配置由数据库管理，Worker 常驻）
-    listener.start()
-    auto_reply_worker.start()
+    # 1. 后台服务（监听 + 自动回复）在独立子进程里跑，
+    #    与 CLI 主进程的事件循环彻底隔离
+    import subprocess as _subprocess
+    import sys as _sys
+
+    daemon_proc = _subprocess.Popen(
+        [_sys.executable, str(Path(__file__).parent / "daemon.py")],
+    )
 
     # 2. Agent + MCP
     agent = DeskAgent()
@@ -247,8 +250,7 @@ async def main() -> None:
     finally:
         alert_task.cancel()
         await agent.close()
-        listener.stop()
-        auto_reply_worker.stop()
+        daemon_proc.terminate()
         print("已退出。")
 
 
